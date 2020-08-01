@@ -19,28 +19,17 @@ package rpc
 */
 
 import (
-	"time"
+	"context"
 
-	sliverpb "github.com/bishopfox/sliver/protobuf/sliver"
-	"github.com/bishopfox/sliver/server/core"
-
-	"github.com/golang/protobuf/proto"
+	"github.com/bishopfox/sliver/protobuf/sliverpb"
 )
 
-func rpcScreenshot(req []byte, timeout time.Duration, resp RPCResponse) {
-	screenshotReq := &sliverpb.ScreenshotReq{}
-	err := proto.Unmarshal(req, screenshotReq)
+// Screenshot - Take a screenshot of the remote system
+func (rpc *Server) Screenshot(ctx context.Context, req *sliverpb.ScreenshotReq) (*sliverpb.Screenshot, error) {
+	resp := &sliverpb.Screenshot{}
+	err := rpc.GenericHandler(req, resp)
 	if err != nil {
-		resp([]byte{}, err)
-		return
+		return nil, err
 	}
-	sliver := (*core.Hive.Slivers)[screenshotReq.SliverID]
-	if sliver == nil {
-		resp([]byte{}, err)
-		return
-	}
-
-	data, _ := proto.Marshal(&sliverpb.ScreenshotReq{})
-	data, err = sliver.Request(sliverpb.MsgScreenshotReq, timeout, data)
-	resp(data, err)
+	return resp, nil
 }

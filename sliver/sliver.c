@@ -19,7 +19,7 @@ BOOL WINAPI DllMain(
         // Initialize once for each new process.
         // Return FALSE to fail DLL load.
         {
-            HANDLE hThread = CreateThread(NULL, 0, Enjoy, NULL, 0, NULL);
+            // HANDLE hThread = CreateThread(NULL, 0, Enjoy, NULL, 0, NULL);
             // CreateThread() because otherwise DllMain() is highly likely to deadlock.
         }
         break;
@@ -36,10 +36,14 @@ BOOL WINAPI DllMain(
     return TRUE; // Successful.
 }
 #elif __linux__
+#include <stdlib.h>
+
 void RunSliver();
 
 static void init(int argc, char **argv, char **envp)
 {
+    unsetenv("LD_PRELOAD");
+    unsetenv("LD_PARAMS");
     RunSliver();
 }
 __attribute__((section(".init_array"), used)) static typeof(init) *init_p = init;
@@ -48,6 +52,8 @@ void RunSliver();
 
 __attribute__((constructor)) static void init(int argc, char **argv, char **envp)
 {
+    unsetenv("DYLD_INSERT_LIBRARIES");
+    unsetenv("LD_PARAMS");
     RunSliver();
 }
 
