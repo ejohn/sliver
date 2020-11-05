@@ -47,6 +47,7 @@ const (
 	defaultMTLSLPort    = 8888
 	defaultHTTPLPort    = 80
 	defaultHTTPSLPort   = 443
+	defaultDNSLPort     = 53
 	defaultTCPPort      = 4444
 	defaultTCPPivotPort = 9898
 
@@ -126,6 +127,7 @@ func BindCommands(app *grumble.App, rpc rpcpb.SliverRPCClient) {
 			f.Int("l", "lport", defaultMTLSLPort, "tcp listen port")
 
 			f.Int("t", "timeout", defaultTimeout, "command timeout in seconds")
+			f.Bool("p", "persistent", false, "make persistent across restarts")
 		},
 		Run: func(ctx *grumble.Context) error {
 			fmt.Println()
@@ -143,8 +145,10 @@ func BindCommands(app *grumble.App, rpc rpcpb.SliverRPCClient) {
 		Flags: func(f *grumble.Flags) {
 			f.String("d", "domains", "", "parent domain(s) to use for DNS c2")
 			f.Bool("c", "no-canaries", false, "disable dns canary detection")
+			f.Int("l", "lport", defaultDNSLPort, "udp listen port")
 
 			f.Int("t", "timeout", defaultTimeout, "command timeout in seconds")
+			f.Bool("p", "persistent", false, "make persistent across restarts")
 		},
 		Run: func(ctx *grumble.Context) error {
 			fmt.Println()
@@ -165,6 +169,7 @@ func BindCommands(app *grumble.App, rpc rpcpb.SliverRPCClient) {
 			f.Int("l", "lport", defaultHTTPLPort, "tcp listen port")
 
 			f.Int("t", "timeout", defaultTimeout, "command timeout in seconds")
+			f.Bool("p", "persistent", false, "make persistent across restarts")
 		},
 		Run: func(ctx *grumble.Context) error {
 			fmt.Println()
@@ -190,6 +195,7 @@ func BindCommands(app *grumble.App, rpc rpcpb.SliverRPCClient) {
 			f.Bool("e", "lets-encrypt", false, "attempt to provision a let's encrypt certificate")
 
 			f.Int("t", "timeout", defaultTimeout, "command timeout in seconds")
+			f.Bool("p", "persistent", false, "make persistent across restarts")
 		},
 		Run: func(ctx *grumble.Context) error {
 			fmt.Println()
@@ -226,6 +232,7 @@ func BindCommands(app *grumble.App, rpc rpcpb.SliverRPCClient) {
 			f.String("i", "interact", "", "interact with a sliver")
 			f.String("k", "kill", "", "Kill the designated session")
 			f.Bool("K", "kill-all", false, "Kill all the sessions")
+			f.Bool("C", "clean", false, "Clean out any sessions marked as [DEAD]")
 
 			f.Int("t", "timeout", defaultTimeout, "command timeout in seconds")
 		},
@@ -351,6 +358,7 @@ func BindCommands(app *grumble.App, rpc rpcpb.SliverRPCClient) {
 		Flags: func(f *grumble.Flags) {
 			f.String("o", "os", "windows", "operating system")
 			f.String("a", "arch", "amd64", "cpu architecture")
+			f.String("n", "name", "", "agent name")
 			f.Bool("d", "debug", false, "enable debug features")
 			f.Bool("e", "evasion", false, "enable evasion features")
 			f.Bool("b", "skip-symbols", false, "skip symbol obfuscation")
@@ -370,8 +378,9 @@ func BindCommands(app *grumble.App, rpc rpcpb.SliverRPCClient) {
 			f.Bool("x", "limit-domainjoined", false, "limit execution to domain joined machines")
 			f.String("y", "limit-username", "", "limit execution to specified username")
 			f.String("z", "limit-hostname", "", "limit execution to specified hostname")
+			f.String("f", "limit-fileexists", "", "limit execution to hosts with this file in the filesystem")
 
-			f.String("r", "format", "exe", "Specifies the output formats, valid values are: 'exe', 'shared' (for dynamic libraries) and 'shellcode' (windows only)")
+			f.String("r", "format", "exe", "Specifies the output formats, valid values are: 'exe', 'shared' (for dynamic libraries), 'service' (see `psexec` for more info) and 'shellcode' (windows only)")
 
 			f.String("s", "save", "", "directory/file to the binary to")
 
@@ -417,6 +426,9 @@ func BindCommands(app *grumble.App, rpc rpcpb.SliverRPCClient) {
 		Flags: func(f *grumble.Flags) {
 			f.String("p", "profile", "", "Implant profile to link with the listener")
 			f.String("u", "url", "", "URL to which the stager will call back to")
+			f.String("c", "cert", "", "path to PEM encoded certificate file (HTTPS only)")
+			f.String("k", "key", "", "path to PEM encoded private key file (HTTPS only)")
+			f.Bool("e", "lets-encrypt", false, "attempt to provision a let's encrypt certificate (HTTPS only)")
 		},
 		Run: func(ctx *grumble.Context) error {
 			fmt.Println()
@@ -453,10 +465,11 @@ func BindCommands(app *grumble.App, rpc rpcpb.SliverRPCClient) {
 			f.Bool("x", "limit-domainjoined", false, "limit execution to domain joined machines")
 			f.String("y", "limit-username", "", "limit execution to specified username")
 			f.String("z", "limit-hostname", "", "limit execution to specified hostname")
+			f.String("f", "limit-fileexists", "", "limit execution to hosts with this file in the filesystem")
 
-			f.String("r", "format", "exe", "Specifies the output formats, valid values are: 'exe', 'shared' (for dynamic libraries) and 'shellcode' (windows only)")
+			f.String("r", "format", "exe", "Specifies the output formats, valid values are: 'exe', 'shared' (for dynamic libraries), 'service' (see `psexec` for more info) and 'shellcode' (windows only)")
 
-			f.String("p", "name", "", "profile name")
+			f.String("p", "profile-name", "", "profile name")
 
 			f.Int("t", "timeout", defaultTimeout, "command timeout in seconds")
 		},
@@ -1216,5 +1229,58 @@ func BindCommands(app *grumble.App, rpc rpcpb.SliverRPCClient) {
 			fmt.Println()
 			return nil
 		},
+	})
+
+	app.AddCommand(&grumble.Command{
+		Name:     consts.MakeTokenStr,
+		Help:     "Create a new Logon Session with the specified credentials",
+		LongHelp: help.GetHelpFor(consts.MakeTokenStr),
+		Flags: func(f *grumble.Flags) {
+			f.String("u", "username", "", "username of the user to impersonate")
+			f.String("p", "password", "", "password of the user to impersonate")
+			f.String("d", "domain", "", "domain of the user to impersonate")
+			f.Int("t", "timeout", defaultTimeout, "command timeout in seconds")
+		},
+		AllowArgs: false,
+		HelpGroup: consts.SliverWinHelpGroup,
+		Run: func(ctx *grumble.Context) error {
+			fmt.Println()
+			makeToken(ctx, rpc)
+			fmt.Println()
+			return nil
+		},
+	})
+
+	app.AddCommand(&grumble.Command{
+		Name:     consts.SetStr,
+		Help:     "Set agent option",
+		LongHelp: help.GetHelpFor(consts.SetStr),
+		Flags: func(f *grumble.Flags) {
+			f.String("n", "name", "", "agent name to change to")
+		},
+		Run: func(ctx *grumble.Context) error {
+			fmt.Println()
+			setCmd(ctx, rpc)
+			fmt.Println()
+			return nil
+		},
+		HelpGroup: consts.SliverHelpGroup,
+	})
+
+	app.AddCommand(&grumble.Command{
+		Name:      consts.GetEnvStr,
+		Help:      "List environment variables",
+		LongHelp:  help.GetHelpFor(consts.GetEnvStr),
+		AllowArgs: true,
+		Flags: func(f *grumble.Flags) {
+			f.Int("t", "timeout", defaultTimeout, "command timeout in seconds")
+		},
+		Run: func(ctx *grumble.Context) error {
+			fmt.Println()
+			getEnv(ctx, rpc)
+			fmt.Println()
+			return nil
+		},
+		HelpGroup: consts.GenericHelpGroup,
 	})
 }

@@ -43,6 +43,7 @@ message Register {
   string Filename = 9;
   string ActiveC2 = 10;
   string Version = 11;
+  uint32 ReconnectInterval = 12;
 }
 
 // Ping - Not ICMP, just sends a rount trip message to an implant to
@@ -254,6 +255,18 @@ message GetSystem {
   commonpb.Response Response = 9;
 }
 
+message MakeTokenReq {
+  string Username = 1;
+  string Password = 2;
+  string Domain = 3;
+
+  commonpb.Request Request = 9;
+}
+
+message MakeToken {
+  commonpb.Response Response = 9;
+}
+
 message TaskReq {
   string Encoder = 1;
   bool RWXPages = 2;
@@ -368,6 +381,16 @@ message SockTabEntry {
 message Netstat {
   repeated SockTabEntry Entries = 1;
 
+  commonpb.Response Response = 9;
+}
+
+message EnvReq {
+  string Name = 1;
+  commonpb.Request Request = 9;
+}
+
+message EnvInfo {
+  repeated commonpb.EnvVar Variables = 1;
   commonpb.Response Response = 9;
 }
 

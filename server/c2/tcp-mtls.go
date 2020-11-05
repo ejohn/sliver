@@ -87,13 +87,13 @@ func handleSliverConnection(conn net.Conn) {
 	mtlsLog.Infof("Accepted incoming connection: %s", conn.RemoteAddr())
 
 	session := &core.Session{
-		ID:            core.NextSessionID(),
 		Transport:     "mtls",
 		RemoteAddress: fmt.Sprintf("%s", conn.RemoteAddr()),
 		Send:          make(chan *sliverpb.Envelope),
 		RespMutex:     &sync.RWMutex{},
 		Resp:          map[uint64]chan *sliverpb.Envelope{},
 	}
+	session.UpdateCheckin()
 
 	defer func() {
 		mtlsLog.Debugf("Cleaning up for %s", session.Name)
@@ -101,7 +101,12 @@ func handleSliverConnection(conn net.Conn) {
 		conn.Close()
 	}()
 
+	done := make(chan bool)
+
 	go func() {
+		defer func() {
+			done <- true
+		}()
 		handlers := serverHandlers.GetSessionHandlers()
 		for {
 			envelope, err := socketReadEnvelope(conn)
@@ -109,6 +114,7 @@ func handleSliverConnection(conn net.Conn) {
 				mtlsLog.Errorf("Socket read error %v", err)
 				return
 			}
+			session.UpdateCheckin()
 			if envelope.ID != 0 {
 				session.RespMutex.RLock()
 				if resp, ok := session.Resp[envelope.ID]; ok {
@@ -121,11 +127,17 @@ func handleSliverConnection(conn net.Conn) {
 		}
 	}()
 
-	for envelope := range session.Send {
-		err := socketWriteEnvelope(conn, envelope)
-		if err != nil {
-			mtlsLog.Errorf("Socket write failed %v", err)
-			return
+Loop:
+	for {
+		select {
+		case envelope := <-session.Send:
+			err := socketWriteEnvelope(conn, envelope)
+			if err != nil {
+				mtlsLog.Errorf("Socket write failed %v", err)
+				break Loop
+			}
+		case <-done:
+			break Loop
 		}
 	}
 	mtlsLog.Infof("Closing connection to session %s", session.Name)

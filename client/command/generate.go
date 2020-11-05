@@ -29,6 +29,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"text/tabwriter"
 
@@ -232,8 +233,21 @@ func generateStager(ctx *grumble.Context, rpc rpcpb.SliverRPCClient) {
 
 // Shared function that extracts the compile flags from the grumble context
 func parseCompileFlags(ctx *grumble.Context) *clientpb.ImplantConfig {
+	var name string
 	targetOS := strings.ToLower(ctx.Flags.String("os"))
 	arch := strings.ToLower(ctx.Flags.String("arch"))
+
+	if ctx.Flags["name"] != nil {
+		name = strings.ToLower(ctx.Flags.String("name"))
+
+		if name != "" {
+			isAlphanumeric := regexp.MustCompile(`^[[:alnum:]]+$`).MatchString
+			if !isAlphanumeric(name) {
+				fmt.Printf(Warn + "Agent's name must be in alphanumeric only\n")
+				return nil
+			}
+		}
+	}
 
 	c2s := []*clientpb.ImplantC2{}
 
@@ -282,9 +296,11 @@ func parseCompileFlags(ctx *grumble.Context) *clientpb.ImplantConfig {
 	limitHostname := ctx.Flags.String("limit-hostname")
 	limitUsername := ctx.Flags.String("limit-username")
 	limitDatetime := ctx.Flags.String("limit-datetime")
+	limitFileExists := ctx.Flags.String("limit-fileexists")
 
 	isSharedLib := false
 	isService := false
+	isShellcode := false
 
 	format := ctx.Flags.String("format")
 	var configFormat clientpb.ImplantConfig_OutputFormat
@@ -296,7 +312,7 @@ func parseCompileFlags(ctx *grumble.Context) *clientpb.ImplantConfig {
 		isSharedLib = true
 	case "shellcode":
 		configFormat = clientpb.ImplantConfig_SHELLCODE
-		isSharedLib = true
+		isShellcode = true
 	case "service":
 		configFormat = clientpb.ImplantConfig_SERVICE
 		isService = true
@@ -329,6 +345,7 @@ func parseCompileFlags(ctx *grumble.Context) *clientpb.ImplantConfig {
 	config := &clientpb.ImplantConfig{
 		GOOS:             targetOS,
 		GOARCH:           arch,
+		Name:             name,
 		Debug:            ctx.Flags.Bool("debug"),
 		Evasion:          ctx.Flags.Bool("evasion"),
 		ObfuscateSymbols: symbolObfuscation,
@@ -342,10 +359,12 @@ func parseCompileFlags(ctx *grumble.Context) *clientpb.ImplantConfig {
 		LimitHostname:     limitHostname,
 		LimitUsername:     limitUsername,
 		LimitDatetime:     limitDatetime,
+		LimitFileExists:   limitFileExists,
 
 		Format:      configFormat,
 		IsSharedLib: isSharedLib,
 		IsService:   isService,
+		IsShellcode: isShellcode,
 	}
 
 	return config
@@ -610,11 +629,14 @@ func getLimitsString(config *clientpb.ImplantConfig) string {
 	if config.LimitHostname != "" {
 		limits = append(limits, fmt.Sprintf("hostname=%s", config.LimitHostname))
 	}
+	if config.LimitFileExists != "" {
+		limits = append(limits, fmt.Sprintf("fileexists=%s", config.LimitFileExists))
+	}
 	return strings.Join(limits, "; ")
 }
 
 func newProfile(ctx *grumble.Context, rpc rpcpb.SliverRPCClient) {
-	name := ctx.Flags.String("name")
+	name := ctx.Flags.String("profile-name")
 	if name == "" {
 		fmt.Printf(Warn + "Invalid profile name\n")
 		return

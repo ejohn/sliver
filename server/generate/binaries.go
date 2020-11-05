@@ -111,6 +111,7 @@ type ImplantConfig struct {
 	LimitHostname     string `json:"limit_hostname"`
 	LimitUsername     string `json:"limit_username"`
 	LimitDatetime     string `json:"limit_datetime"`
+	LimitFileExists   string `json:"limit_fileexists"`
 
 	// Output Format
 	Format clientpb.ImplantConfig_OutputFormat `json:"format"`
@@ -118,6 +119,7 @@ type ImplantConfig struct {
 	// For 	IsSharedLib bool `json:"is_shared_lib"`
 	IsSharedLib bool `json:"is_shared_lib"`
 	IsService   bool `json:"is_service"`
+	IsShellcode bool `json:"is_shellcode"`
 
 	FileName string
 }
@@ -143,9 +145,11 @@ func (c *ImplantConfig) ToProtobuf() *clientpb.ImplantConfig {
 		LimitDomainJoined: c.LimitDomainJoined,
 		LimitHostname:     c.LimitHostname,
 		LimitUsername:     c.LimitUsername,
+		LimitFileExists:   c.LimitFileExists,
 
 		IsSharedLib: c.IsSharedLib,
 		IsService:   c.IsService,
+		IsShellcode: c.IsShellcode,
 		Format:      c.Format,
 
 		FileName: c.FileName,
@@ -179,10 +183,12 @@ func ImplantConfigFromProtobuf(pbConfig *clientpb.ImplantConfig) *ImplantConfig 
 	cfg.LimitDatetime = pbConfig.LimitDatetime
 	cfg.LimitUsername = pbConfig.LimitUsername
 	cfg.LimitHostname = pbConfig.LimitHostname
+	cfg.LimitFileExists = pbConfig.LimitFileExists
 
 	cfg.Format = pbConfig.Format
 	cfg.IsSharedLib = pbConfig.IsSharedLib
 	cfg.IsService = pbConfig.IsService
+	cfg.IsShellcode = pbConfig.IsShellcode
 
 	cfg.C2 = copyC2List(pbConfig.C2)
 	cfg.MTLSc2Enabled = isC2Enabled([]string{"mtls"}, cfg.C2)
@@ -433,7 +439,11 @@ func renderSliverGoCode(config *ImplantConfig, goConfig *gogo.GoConfig) (string,
 	}
 
 	if config.Name == "" {
-		config.Name = GetCodename()
+		name, err := GetCodename()
+		if err != nil {
+			return "", err
+		}
+		config.Name = name
 	}
 	buildLog.Infof("Generating new sliver binary '%s'", config.Name)
 
@@ -445,7 +455,10 @@ func renderSliverGoCode(config *ImplantConfig, goConfig *gogo.GoConfig) (string,
 
 	sliversDir := GetSliversDir() // ~/.sliver/slivers
 	projectGoPathDir := path.Join(sliversDir, config.GOOS, config.GOARCH, config.Name)
-	os.MkdirAll(projectGoPathDir, 0700)
+	if _, err := os.Stat(projectGoPathDir); os.IsNotExist(err) {
+		os.MkdirAll(projectGoPathDir, 0700)
+	}
+
 	goConfig.GOPATH = projectGoPathDir
 
 	// Cert PEM encoded certificates
@@ -509,7 +522,7 @@ func renderSliverGoCode(config *ImplantConfig, goConfig *gogo.GoConfig) (string,
 		var fileName string
 		// Skip dllmain files for anything non windows
 		if boxName == "sliver.h" || boxName == "sliver.c" {
-			if !config.IsSharedLib {
+			if !config.IsSharedLib && !config.IsShellcode {
 				continue
 			}
 		}
@@ -548,7 +561,10 @@ func renderSliverGoCode(config *ImplantConfig, goConfig *gogo.GoConfig) (string,
 		canaryTmpl, err := canaryTmpl.Funcs(template.FuncMap{
 			"GenerateCanary": canaryGenerator.GenerateCanary,
 		}).Parse(buf.String())
-		canaryTmpl.Execute(fSliver, canaryGenerator)
+		if err != nil {
+			return "", err
+		}
+		err = canaryTmpl.Execute(fSliver, canaryGenerator)
 
 		if err != nil {
 			buildLog.Infof("Failed to render go code: %s", err)

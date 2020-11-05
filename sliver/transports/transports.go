@@ -54,7 +54,7 @@ var (
 
 	readBufSize       = 16 * 1024 // 16kb
 	maxErrors         = getMaxConnectionErrors()
-	reconnectInterval = getReconnectInterval()
+	reconnectInterval = GetReconnectInterval()
 
 	ccCounter = new(int)
 
@@ -157,7 +157,7 @@ func StartConnectionLoop() *Connection {
 				return connection
 			}
 			// {{if .Debug}}
-			log.Printf("[mtls] Connection failed %s", err)
+			log.Printf("[%s] Connection failed %s", uri.Scheme, err)
 			// {{end}}
 			connectionAttempts++
 			// {{end}} - HTTPc2Enabled
@@ -249,7 +249,7 @@ func nextCCServer() *url.URL {
 	return uri
 }
 
-func getReconnectInterval() time.Duration {
+func GetReconnectInterval() time.Duration {
 	reconnect, err := strconv.Atoi(`{{.ReconnectInterval}}`)
 	if err != nil {
 		return 60 * time.Second
